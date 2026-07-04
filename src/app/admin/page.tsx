@@ -6,6 +6,32 @@ import { supabase, type ContactMessage, type Project } from "@/lib/supabase";
 const ADMIN_PASSWORD = "erik2024";
 type Tab = "zpravy" | "projekty";
 
+type ProjectForm = {
+  slug: string;
+  name: string;
+  category: string;
+  year: string;
+  description: string;
+  challenge: string;
+  featuresRaw: string;
+  techRaw: string;
+  image_url: string;
+  accent: string;
+};
+
+const emptyForm = (): ProjectForm => ({
+  slug: "",
+  name: "",
+  category: "",
+  year: new Date().getFullYear().toString(),
+  description: "",
+  challenge: "",
+  featuresRaw: "",
+  techRaw: "",
+  image_url: "",
+  accent: "#22c55e",
+});
+
 export default function AdminPage() {
   const [authed, setAuthed] = useState(false);
   const [passwordInput, setPasswordInput] = useState("");
@@ -19,32 +45,31 @@ export default function AdminPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [projLoading, setProjLoading] = useState(true);
 
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [form, setForm] = useState<ProjectForm>(emptyForm());
+  const [formError, setFormError] = useState("");
+  const [formSaving, setFormSaving] = useState(false);
+
   useEffect(() => {
     const saved = sessionStorage.getItem("admin_authed");
     if (saved === "true") setAuthed(true);
   }, []);
 
   useEffect(() => {
-    if (authed) {
-      fetchMessages();
-      fetchProjects();
-    }
+    if (authed) { fetchMessages(); fetchProjects(); }
   }, [authed]);
 
   const handleLogin = () => {
     if (passwordInput === ADMIN_PASSWORD) {
       sessionStorage.setItem("admin_authed", "true");
-      setAuthed(true);
-      setAuthError(false);
-    } else {
-      setAuthError(true);
-    }
+      setAuthed(true); setAuthError(false);
+    } else { setAuthError(true); }
   };
 
   const handleLogout = () => {
     sessionStorage.removeItem("admin_authed");
-    setAuthed(false);
-    setPasswordInput("");
+    setAuthed(false); setPasswordInput("");
   };
 
   const fetchMessages = async () => {
@@ -73,6 +98,66 @@ export default function AdminPage() {
     setProjects((prev) => prev.filter((p) => p.id !== id));
   };
 
+  const openNew = () => {
+    setEditingId(null);
+    setForm(emptyForm());
+    setFormError("");
+    setShowForm(true);
+  };
+
+  const openEdit = (p: Project) => {
+    setEditingId(p.id ?? null);
+    setForm({
+      slug: p.slug,
+      name: p.name,
+      category: p.category,
+      year: p.year,
+      description: p.description,
+      challenge: p.challenge,
+      featuresRaw: p.features.join(", "),
+      techRaw: p.tech.join(", "),
+      image_url: p.image_url,
+      accent: p.accent,
+    });
+    setFormError("");
+    setShowForm(true);
+  };
+
+  const handleSave = async () => {
+    if (!form.name.trim() || !form.slug.trim() || !form.category.trim() || !form.description.trim()) {
+      setFormError("Vyplňte povinná pole: název, slug, kategorie, popis.");
+      return;
+    }
+    setFormSaving(true);
+    setFormError("");
+
+    const payload = {
+      slug: form.slug.trim(),
+      name: form.name.trim(),
+      category: form.category.trim(),
+      year: form.year.trim(),
+      description: form.description.trim(),
+      challenge: form.challenge.trim(),
+      features: form.featuresRaw.split(",").map((s) => s.trim()).filter(Boolean),
+      tech: form.techRaw.split(",").map((s) => s.trim()).filter(Boolean),
+      image_url: form.image_url.trim(),
+      accent: form.accent,
+    };
+
+    if (editingId) {
+      const { error } = await supabase.from("projects").update(payload).eq("id", editingId);
+      if (error) { setFormError("Chyba: " + error.message); setFormSaving(false); return; }
+    } else {
+      const maxOrder = projects.length > 0 ? Math.max(...projects.map((p) => p.sort_order)) + 1 : 1;
+      const { error } = await supabase.from("projects").insert([{ ...payload, sort_order: maxOrder }]);
+      if (error) { setFormError("Chyba: " + error.message); setFormSaving(false); return; }
+    }
+
+    await fetchProjects();
+    setShowForm(false);
+    setFormSaving(false);
+  };
+
   const filteredMessages = messages.filter(
     (m) =>
       m.name.toLowerCase().includes(msgSearch.toLowerCase()) ||
@@ -84,15 +169,14 @@ export default function AdminPage() {
     d ? new Date(d).toLocaleString("cs-CZ", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
 
   const inputSt: React.CSSProperties = {
-    width: "100%",
-    background: "#0a0a0a",
-    border: "1px solid #2a2a2a",
-    borderRadius: "4px",
-    padding: "0.7rem 0.9rem",
-    fontFamily: "var(--font-inter)",
-    fontSize: "0.85rem",
-    color: "#f5f5f5",
-    outline: "none",
+    width: "100%", background: "#0a0a0a", border: "1px solid #2a2a2a",
+    borderRadius: "4px", padding: "0.7rem 0.9rem",
+    fontFamily: "var(--font-inter)", fontSize: "0.85rem", color: "#f5f5f5", outline: "none",
+  };
+
+  const labelSt: React.CSSProperties = {
+    display: "block", fontFamily: "var(--font-inter)", fontSize: "0.72rem",
+    fontWeight: 500, color: "#737373", marginBottom: "0.35rem",
   };
 
   if (!authed) {
@@ -103,9 +187,7 @@ export default function AdminPage() {
             Erik<span style={{ color: "#22c55e" }}>.</span> Admin
           </p>
           <p style={{ fontFamily: "var(--font-inter)", fontSize: "0.85rem", color: "#737373", marginBottom: "1.75rem" }}>Zadejte heslo</p>
-          <input
-            type="password"
-            value={passwordInput}
+          <input type="password" value={passwordInput}
             onChange={(e) => { setPasswordInput(e.target.value); setAuthError(false); }}
             onKeyDown={(e) => e.key === "Enter" && handleLogin()}
             placeholder="Heslo"
@@ -175,7 +257,7 @@ export default function AdminPage() {
       {tab === "projekty" && (
         <>
           <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "1.25rem" }}>
-            <button style={{ fontFamily: "var(--font-inter)", fontSize: "0.85rem", fontWeight: 600, color: "#0a0a0a", background: "#22c55e", border: "none", borderRadius: "4px", padding: "0.6rem 1.25rem", cursor: "pointer" }}>
+            <button onClick={openNew} style={{ fontFamily: "var(--font-inter)", fontSize: "0.85rem", fontWeight: 600, color: "#0a0a0a", background: "#22c55e", border: "none", borderRadius: "4px", padding: "0.6rem 1.25rem", cursor: "pointer" }}>
               + Přidat projekt
             </button>
           </div>
@@ -195,7 +277,7 @@ export default function AdminPage() {
                     <p style={{ fontFamily: "var(--font-inter)", fontSize: "0.75rem", color: "#525252" }}>{p.category} · {p.year}</p>
                   </div>
                   <div style={{ display: "flex", gap: "0.5rem", flexShrink: 0 }}>
-                    <button style={{ fontFamily: "var(--font-inter)", fontSize: "0.75rem", color: "#a3a3a3", background: "transparent", border: "1px solid #2a2a2a", borderRadius: "4px", padding: "0.3rem 0.75rem", cursor: "pointer" }}>Upravit</button>
+                    <button onClick={() => openEdit(p)} style={{ fontFamily: "var(--font-inter)", fontSize: "0.75rem", color: "#a3a3a3", background: "transparent", border: "1px solid #2a2a2a", borderRadius: "4px", padding: "0.3rem 0.75rem", cursor: "pointer" }}>Upravit</button>
                     <button onClick={() => deleteProject(p.id)} style={{ fontFamily: "var(--font-inter)", fontSize: "0.75rem", color: "#ef4444", background: "transparent", border: "1px solid rgba(239,68,68,0.3)", borderRadius: "4px", padding: "0.3rem 0.75rem", cursor: "pointer" }}>Smazat</button>
                   </div>
                 </div>
@@ -203,6 +285,97 @@ export default function AdminPage() {
             </div>
           )}
         </>
+      )}
+
+      {/* FORMULÁŘ OVERLAY */}
+      {showForm && (
+        <div
+          onClick={(e) => { if (e.target === e.currentTarget) setShowForm(false); }}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)", zIndex: 200, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "2rem 1rem", overflowY: "auto" }}
+        >
+          <div style={{ background: "#0f0f0f", border: "1px solid #1f1f1f", borderRadius: "8px", padding: "2rem", width: "100%", maxWidth: "600px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.75rem" }}>
+              <p style={{ fontFamily: "var(--font-playfair)", fontSize: "1.25rem", fontWeight: 700, color: "#f5f5f5" }}>
+                {editingId ? "Upravit projekt" : "Nový projekt"}
+              </p>
+              <button onClick={() => setShowForm(false)} style={{ background: "none", border: "none", color: "#525252", fontSize: "1.25rem", cursor: "pointer" }}>✕</button>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+                <div>
+                  <label style={labelSt}>Název *</label>
+                  <input style={inputSt} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Název projektu" />
+                </div>
+                <div>
+                  <label style={labelSt}>Slug * (URL)</label>
+                  <input style={inputSt} value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value.toLowerCase().replace(/\s+/g, "-") })} placeholder="nazev-projektu" />
+                </div>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+                <div>
+                  <label style={labelSt}>Kategorie *</label>
+                  <input style={inputSt} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} placeholder="E-commerce & Restaurace" />
+                </div>
+                <div>
+                  <label style={labelSt}>Rok</label>
+                  <input style={inputSt} value={form.year} onChange={(e) => setForm({ ...form, year: e.target.value })} placeholder="2024" />
+                </div>
+              </div>
+
+              <div>
+                <label style={labelSt}>Popis *</label>
+                <textarea style={{ ...inputSt, resize: "vertical" }} rows={3} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Popis projektu..." />
+              </div>
+
+              <div>
+                <label style={labelSt}>Výzva projektu</label>
+                <textarea style={{ ...inputSt, resize: "vertical" }} rows={2} value={form.challenge} onChange={(e) => setForm({ ...form, challenge: e.target.value })} placeholder="Hlavní výzva a řešení..." />
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+                <div>
+                  <label style={labelSt}>Funkce (oddělené čárkou)</label>
+                  <input style={inputSt} value={form.featuresRaw} onChange={(e) => setForm({ ...form, featuresRaw: e.target.value })} placeholder="Admin panel, Galerie, ..." />
+                </div>
+                <div>
+                  <label style={labelSt}>Tech stack (oddělené čárkou)</label>
+                  <input style={inputSt} value={form.techRaw} onChange={(e) => setForm({ ...form, techRaw: e.target.value })} placeholder="Next.js 14, Supabase, ..." />
+                </div>
+              </div>
+
+              <div>
+                <label style={labelSt}>URL obrázku</label>
+                <input style={inputSt} value={form.image_url} onChange={(e) => setForm({ ...form, image_url: e.target.value })} placeholder="https://images.unsplash.com/..." />
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                <div>
+                  <label style={labelSt}>Akcentní barva</label>
+                  <input type="color" value={form.accent} onChange={(e) => setForm({ ...form, accent: e.target.value })}
+                    style={{ width: "48px", height: "36px", border: "1px solid #2a2a2a", borderRadius: "4px", background: "#0a0a0a", cursor: "pointer", padding: "2px" }} />
+                </div>
+                <p style={{ fontFamily: "var(--font-inter)", fontSize: "0.78rem", color: "#525252", marginTop: "1.1rem" }}>{form.accent}</p>
+              </div>
+
+              {formError && (
+                <p style={{ fontFamily: "var(--font-inter)", fontSize: "0.8rem", color: "#ef4444", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: "4px", padding: "0.6rem 0.9rem" }}>
+                  {formError}
+                </p>
+              )}
+
+              <div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end", marginTop: "0.25rem" }}>
+                <button onClick={() => setShowForm(false)} style={{ fontFamily: "var(--font-inter)", fontSize: "0.85rem", color: "#737373", background: "transparent", border: "1px solid #2a2a2a", borderRadius: "4px", padding: "0.65rem 1.25rem", cursor: "pointer" }}>
+                  Zrušit
+                </button>
+                <button onClick={handleSave} disabled={formSaving} style={{ fontFamily: "var(--font-inter)", fontSize: "0.85rem", fontWeight: 600, color: "#0a0a0a", background: "#22c55e", border: "none", borderRadius: "4px", padding: "0.65rem 1.5rem", cursor: formSaving ? "not-allowed" : "pointer", opacity: formSaving ? 0.7 : 1 }}>
+                  {formSaving ? "Ukládám..." : "Uložit projekt"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
