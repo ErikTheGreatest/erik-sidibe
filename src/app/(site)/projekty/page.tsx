@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   description: "Přehled webových projektů vytvořených pro české firmy.",
 };
 
-export const revalidate = 60;
+export const revalidate = 0;
 
 async function getProjects(): Promise<Project[]> {
   const { data } = await supabase
