@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase, type ContactMessage, type Project } from "@/lib/supabase";
 
 const ADMIN_PASSWORD = "erik2024";
@@ -20,16 +20,11 @@ type ProjectForm = {
 };
 
 const emptyForm = (): ProjectForm => ({
-  slug: "",
-  name: "",
-  category: "",
+  slug: "", name: "", category: "",
   year: new Date().getFullYear().toString(),
-  description: "",
-  challenge: "",
-  featuresRaw: "",
-  techRaw: "",
-  image_url: "",
-  accent: "#22c55e",
+  description: "", challenge: "",
+  featuresRaw: "", techRaw: "",
+  image_url: "", accent: "#22c55e",
 });
 
 export default function AdminPage() {
@@ -50,6 +45,13 @@ export default function AdminPage() {
   const [form, setForm] = useState<ProjectForm>(emptyForm());
   const [formError, setFormError] = useState("");
   const [formSaving, setFormSaving] = useState(false);
+
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState("");
+  const [uploading, setUploading] = useState(false);
+
+  const fileRef = useRef<HTMLInputElement>(null);
+  const importRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const saved = sessionStorage.getItem("admin_authed");
@@ -101,6 +103,8 @@ export default function AdminPage() {
   const openNew = () => {
     setEditingId(null);
     setForm(emptyForm());
+    setImageFile(null);
+    setImagePreview("");
     setFormError("");
     setShowForm(true);
   };
@@ -108,19 +112,34 @@ export default function AdminPage() {
   const openEdit = (p: Project) => {
     setEditingId(p.id ?? null);
     setForm({
-      slug: p.slug,
-      name: p.name,
-      category: p.category,
-      year: p.year,
-      description: p.description,
-      challenge: p.challenge,
-      featuresRaw: p.features.join(", "),
-      techRaw: p.tech.join(", "),
-      image_url: p.image_url,
-      accent: p.accent,
+      slug: p.slug, name: p.name, category: p.category, year: p.year,
+      description: p.description, challenge: p.challenge,
+      featuresRaw: p.features.join(", "), techRaw: p.tech.join(", "),
+      image_url: p.image_url, accent: p.accent,
     });
+    setImageFile(null);
+    setImagePreview(p.image_url);
     setFormError("");
     setShowForm(true);
+  };
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+  };
+
+  const uploadImage = async (): Promise<string | null> => {
+    if (!imageFile) return form.image_url || null;
+    setUploading(true);
+    const ext = imageFile.name.split(".").pop();
+    const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const { error } = await supabase.storage.from("project-images").upload(fileName, imageFile, { upsert: true });
+    setUploading(false);
+    if (error) return null;
+    const { data } = supabase.storage.from("project-images").getPublicUrl(fileName);
+    return data.publicUrl;
   };
 
   const handleSave = async () => {
@@ -131,17 +150,19 @@ export default function AdminPage() {
     setFormSaving(true);
     setFormError("");
 
+    const imageUrl = await uploadImage();
+    if (!imageUrl) {
+      setFormError("Nepodařilo se nahrát obrázek.");
+      setFormSaving(false);
+      return;
+    }
+
     const payload = {
-      slug: form.slug.trim(),
-      name: form.name.trim(),
-      category: form.category.trim(),
-      year: form.year.trim(),
-      description: form.description.trim(),
-      challenge: form.challenge.trim(),
+      slug: form.slug.trim(), name: form.name.trim(), category: form.category.trim(),
+      year: form.year.trim(), description: form.description.trim(), challenge: form.challenge.trim(),
       features: form.featuresRaw.split(",").map((s) => s.trim()).filter(Boolean),
       tech: form.techRaw.split(",").map((s) => s.trim()).filter(Boolean),
-      image_url: form.image_url.trim(),
-      accent: form.accent,
+      image_url: imageUrl, accent: form.accent,
     };
 
     if (editingId) {
@@ -156,6 +177,43 @@ export default function AdminPage() {
     await fetchProjects();
     setShowForm(false);
     setFormSaving(false);
+  };
+
+  // Export projektů jako JSON
+  const handleExport = () => {
+    const exportData = projects.map(({ id, created_at, ...rest }) => rest);
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `projekty-export-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Import projektů z JSON
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      try {
+        const imported = JSON.parse(ev.target?.result as string) as Omit<Project, "id" | "created_at">[];
+        if (!Array.isArray(imported)) throw new Error("Neplatný formát");
+        const confirmed = confirm(`Importovat ${imported.length} projektů? Stávající projekty zůstanou.`);
+        if (!confirmed) return;
+        const maxOrder = projects.length > 0 ? Math.max(...projects.map((p) => p.sort_order)) : 0;
+        const toInsert = imported.map((p, i) => ({ ...p, sort_order: maxOrder + i + 1 }));
+        const { error } = await supabase.from("projects").insert(toInsert);
+        if (error) { alert("Chyba při importu: " + error.message); return; }
+        await fetchProjects();
+        alert("Import úspěšný!");
+      } catch {
+        alert("Neplatný JSON soubor.");
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = "";
   };
 
   const filteredMessages = messages.filter(
@@ -256,11 +314,19 @@ export default function AdminPage() {
       {/* PROJEKTY */}
       {tab === "projekty" && (
         <>
-          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "1.25rem" }}>
-            <button onClick={openNew} style={{ fontFamily: "var(--font-inter)", fontSize: "0.85rem", fontWeight: 600, color: "#0a0a0a", background: "#22c55e", border: "none", borderRadius: "4px", padding: "0.6rem 1.25rem", cursor: "pointer" }}>
+          <div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end", marginBottom: "1.25rem", flexWrap: "wrap" }}>
+            <input ref={importRef} type="file" accept=".json" onChange={handleImport} style={{ display: "none" }} />
+            <button onClick={() => importRef.current?.click()} style={{ fontFamily: "var(--font-inter)", fontSize: "0.82rem", color: "#a3a3a3", background: "transparent", border: "1px solid #2a2a2a", borderRadius: "4px", padding: "0.5rem 1rem", cursor: "pointer" }}>
+              Importovat JSON
+            </button>
+            <button onClick={handleExport} disabled={projects.length === 0} style={{ fontFamily: "var(--font-inter)", fontSize: "0.82rem", color: "#a3a3a3", background: "transparent", border: "1px solid #2a2a2a", borderRadius: "4px", padding: "0.5rem 1rem", cursor: "pointer", opacity: projects.length === 0 ? 0.4 : 1 }}>
+              Exportovat JSON
+            </button>
+            <button onClick={openNew} style={{ fontFamily: "var(--font-inter)", fontSize: "0.85rem", fontWeight: 600, color: "#0a0a0a", background: "#22c55e", border: "none", borderRadius: "4px", padding: "0.5rem 1.25rem", cursor: "pointer" }}>
               + Přidat projekt
             </button>
           </div>
+
           {projLoading ? (
             <p style={{ fontFamily: "var(--font-inter)", fontSize: "0.85rem", color: "#525252" }}>Načítám...</p>
           ) : projects.length === 0 ? (
@@ -345,9 +411,28 @@ export default function AdminPage() {
                 </div>
               </div>
 
+              {/* Obrázek — upload nebo URL */}
               <div>
-                <label style={labelSt}>URL obrázku</label>
-                <input style={inputSt} value={form.image_url} onChange={(e) => setForm({ ...form, image_url: e.target.value })} placeholder="https://images.unsplash.com/..." />
+                <label style={labelSt}>Obrázek projektu</label>
+                {imagePreview && (
+                  <div style={{ position: "relative", height: "140px", marginBottom: "0.75rem", borderRadius: "4px", overflow: "hidden", border: "1px solid #2a2a2a" }}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={imagePreview} alt="preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  </div>
+                )}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "0.5rem" }}>
+                  <input style={inputSt} value={imageFile ? "" : form.image_url} onChange={(e) => { setForm({ ...form, image_url: e.target.value }); setImagePreview(e.target.value); setImageFile(null); }} placeholder="https://images.unsplash.com/..." />
+                  <button
+                    onClick={() => fileRef.current?.click()}
+                    style={{ fontFamily: "var(--font-inter)", fontSize: "0.78rem", fontWeight: 500, color: "#a3a3a3", background: "#0a0a0a", border: "1px solid #2a2a2a", borderRadius: "4px", padding: "0 1rem", cursor: "pointer", whiteSpace: "nowrap" }}
+                  >
+                    {imageFile ? "✓ Soubor" : "Nahrát soubor"}
+                  </button>
+                </div>
+                <input ref={fileRef} type="file" accept="image/*" onChange={handleImageChange} style={{ display: "none" }} />
+                <p style={{ fontFamily: "var(--font-inter)", fontSize: "0.7rem", color: "#525252", marginTop: "0.35rem" }}>
+                  Vlož URL nebo nahraj soubor z počítače
+                </p>
               </div>
 
               <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
@@ -369,8 +454,8 @@ export default function AdminPage() {
                 <button onClick={() => setShowForm(false)} style={{ fontFamily: "var(--font-inter)", fontSize: "0.85rem", color: "#737373", background: "transparent", border: "1px solid #2a2a2a", borderRadius: "4px", padding: "0.65rem 1.25rem", cursor: "pointer" }}>
                   Zrušit
                 </button>
-                <button onClick={handleSave} disabled={formSaving} style={{ fontFamily: "var(--font-inter)", fontSize: "0.85rem", fontWeight: 600, color: "#0a0a0a", background: "#22c55e", border: "none", borderRadius: "4px", padding: "0.65rem 1.5rem", cursor: formSaving ? "not-allowed" : "pointer", opacity: formSaving ? 0.7 : 1 }}>
-                  {formSaving ? "Ukládám..." : "Uložit projekt"}
+                <button onClick={handleSave} disabled={formSaving || uploading} style={{ fontFamily: "var(--font-inter)", fontSize: "0.85rem", fontWeight: 600, color: "#0a0a0a", background: "#22c55e", border: "none", borderRadius: "4px", padding: "0.65rem 1.5rem", cursor: formSaving ? "not-allowed" : "pointer", opacity: formSaving ? 0.7 : 1 }}>
+                  {uploading ? "Nahrávám obrázek..." : formSaving ? "Ukládám..." : "Uložit projekt"}
                 </button>
               </div>
             </div>
