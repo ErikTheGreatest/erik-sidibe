@@ -181,7 +181,7 @@ export default function AdminPage() {
 
   // Export projektů jako JSON
   const handleExport = () => {
-    const exportData = projects.map(({ id, created_at, ...rest }) => rest);
+    const exportData = projects.map(({ id: _id, created_at: _ca, ...rest }) => rest);
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
