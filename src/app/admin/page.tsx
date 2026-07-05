@@ -50,6 +50,9 @@ export default function AdminPage() {
   const [imagePreview, setImagePreview] = useState("");
   const [uploading, setUploading] = useState(false);
 
+  const [dragItem, setDragItem] = useState<number | null>(null);
+  const [dragOver, setDragOver] = useState<number | null>(null);
+
   const fileRef = useRef<HTMLInputElement>(null);
   const importRef = useRef<HTMLInputElement>(null);
 
@@ -149,14 +152,8 @@ export default function AdminPage() {
     }
     setFormSaving(true);
     setFormError("");
-
     const imageUrl = await uploadImage();
-    if (!imageUrl) {
-      setFormError("Nepodařilo se nahrát obrázek.");
-      setFormSaving(false);
-      return;
-    }
-
+    if (!imageUrl) { setFormError("Nepodařilo se nahrát obrázek."); setFormSaving(false); return; }
     const payload = {
       slug: form.slug.trim(), name: form.name.trim(), category: form.category.trim(),
       year: form.year.trim(), description: form.description.trim(), challenge: form.challenge.trim(),
@@ -164,7 +161,6 @@ export default function AdminPage() {
       tech: form.techRaw.split(",").map((s) => s.trim()).filter(Boolean),
       image_url: imageUrl, accent: form.accent,
     };
-
     if (editingId) {
       const { error } = await supabase.from("projects").update(payload).eq("id", editingId);
       if (error) { setFormError("Chyba: " + error.message); setFormSaving(false); return; }
@@ -173,25 +169,58 @@ export default function AdminPage() {
       const { error } = await supabase.from("projects").insert([{ ...payload, sort_order: maxOrder }]);
       if (error) { setFormError("Chyba: " + error.message); setFormSaving(false); return; }
     }
-
     await fetchProjects();
     setShowForm(false);
     setFormSaving(false);
   };
 
-  // Export projektů jako JSON
+  // ── Drag & drop ──
+  const handleDragStart = (e: React.DragEvent, id: number) => {
+    setDragItem(id);
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleDragOver = (e: React.DragEvent, id: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    if (id !== dragItem) setDragOver(id);
+  };
+
+  const handleDrop = async (targetId: number) => {
+    if (dragItem === null || dragItem === targetId) { setDragItem(null); setDragOver(null); return; }
+    const reordered = [...projects];
+    const fromIdx = reordered.findIndex((p) => p.id === dragItem);
+    const toIdx = reordered.findIndex((p) => p.id === targetId);
+    const [moved] = reordered.splice(fromIdx, 1);
+    reordered.splice(toIdx, 0, moved);
+    const updated = reordered.map((p, i) => ({ ...p, sort_order: i + 1 }));
+    setProjects(updated);
+    setDragItem(null);
+    setDragOver(null);
+    await Promise.all(
+      updated.map((p) => supabase.from("projects").update({ sort_order: p.sort_order }).eq("id", p.id!))
+    );
+  };
+
+  const handleDragEnd = () => { setDragItem(null); setDragOver(null); };
+
+  // ── Export / Import ──
   const handleExport = () => {
-    const exportData = projects.map((p) => ({ slug: p.slug, name: p.name, category: p.category, year: p.year, description: p.description, challenge: p.challenge, features: p.features, tech: p.tech, image_url: p.image_url, accent: p.accent, sort_order: p.sort_order }));
+    const exportData = projects.map((p) => ({
+      slug: p.slug, name: p.name, category: p.category, year: p.year,
+      description: p.description, challenge: p.challenge,
+      features: p.features, tech: p.tech,
+      image_url: p.image_url, accent: p.accent, sort_order: p.sort_order,
+    }));
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `projekty-export-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `projekty-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
-  // Import projektů z JSON
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -199,18 +228,14 @@ export default function AdminPage() {
     reader.onload = async (ev) => {
       try {
         const imported = JSON.parse(ev.target?.result as string) as Omit<Project, "id" | "created_at">[];
-        if (!Array.isArray(imported)) throw new Error("Neplatný formát");
-        const confirmed = confirm(`Importovat ${imported.length} projektů? Stávající projekty zůstanou.`);
-        if (!confirmed) return;
+        if (!Array.isArray(imported)) throw new Error();
+        if (!confirm(`Importovat ${imported.length} projektů?`)) return;
         const maxOrder = projects.length > 0 ? Math.max(...projects.map((p) => p.sort_order)) : 0;
         const toInsert = imported.map((p, i) => ({ ...p, sort_order: maxOrder + i + 1 }));
         const { error } = await supabase.from("projects").insert(toInsert);
-        if (error) { alert("Chyba při importu: " + error.message); return; }
+        if (error) { alert("Chyba: " + error.message); return; }
         await fetchProjects();
-        alert("Import úspěšný!");
-      } catch {
-        alert("Neplatný JSON soubor.");
-      }
+      } catch { alert("Neplatný JSON soubor."); }
     };
     reader.readAsText(file);
     e.target.value = "";
@@ -317,15 +342,19 @@ export default function AdminPage() {
           <div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end", marginBottom: "1.25rem", flexWrap: "wrap" }}>
             <input ref={importRef} type="file" accept=".json" onChange={handleImport} style={{ display: "none" }} />
             <button onClick={() => importRef.current?.click()} style={{ fontFamily: "var(--font-inter)", fontSize: "0.82rem", color: "#a3a3a3", background: "transparent", border: "1px solid #2a2a2a", borderRadius: "4px", padding: "0.5rem 1rem", cursor: "pointer" }}>
-              Importovat JSON
+              Importovat
             </button>
             <button onClick={handleExport} disabled={projects.length === 0} style={{ fontFamily: "var(--font-inter)", fontSize: "0.82rem", color: "#a3a3a3", background: "transparent", border: "1px solid #2a2a2a", borderRadius: "4px", padding: "0.5rem 1rem", cursor: "pointer", opacity: projects.length === 0 ? 0.4 : 1 }}>
-              Exportovat JSON
+              Exportovat
             </button>
             <button onClick={openNew} style={{ fontFamily: "var(--font-inter)", fontSize: "0.85rem", fontWeight: 600, color: "#0a0a0a", background: "#22c55e", border: "none", borderRadius: "4px", padding: "0.5rem 1.25rem", cursor: "pointer" }}>
               + Přidat projekt
             </button>
           </div>
+
+          <p style={{ fontFamily: "var(--font-inter)", fontSize: "0.72rem", color: "#525252", marginBottom: "0.75rem" }}>
+            ⠿ Přetáhni řádky pro změnu pořadí
+          </p>
 
           {projLoading ? (
             <p style={{ fontFamily: "var(--font-inter)", fontSize: "0.85rem", color: "#525252" }}>Načítám...</p>
@@ -336,10 +365,31 @@ export default function AdminPage() {
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
               {projects.map((p) => (
-                <div key={p.id} style={{ background: "#0f0f0f", border: "1px solid #1f1f1f", borderRadius: "6px", padding: "1rem 1.25rem", display: "flex", alignItems: "center", gap: "1rem" }}>
+                <div
+                  key={p.id}
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, p.id!)}
+                  onDragOver={(e) => handleDragOver(e, p.id!)}
+                  onDrop={() => handleDrop(p.id!)}
+                  onDragEnd={handleDragEnd}
+                  style={{
+                    background: dragOver === p.id ? "#1a2a1a" : "#0f0f0f",
+                    border: `1px solid ${dragOver === p.id ? "#22c55e" : "#1f1f1f"}`,
+                    borderRadius: "6px",
+                    padding: "1rem 1.25rem",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "1rem",
+                    cursor: "grab",
+                    opacity: dragItem === p.id ? 0.4 : 1,
+                    transition: "background 0.15s, border-color 0.15s, opacity 0.15s",
+                    userSelect: "none",
+                  }}
+                >
+                  <span style={{ color: "#3a3a3a", fontSize: "1.1rem", flexShrink: 0 }}>⠿</span>
                   <span style={{ width: "10px", height: "10px", borderRadius: "50%", background: p.accent, flexShrink: 0 }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontFamily: "var(--font-inter)", fontSize: "0.9rem", fontWeight: 600, color: "#f5f5f5" }}>{p.name}</p>
+                    <p style={{ fontFamily: "var(--font-inter)", fontSize: "0.9rem", fontWeight: 600, color: "#f5f5f5", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</p>
                     <p style={{ fontFamily: "var(--font-inter)", fontSize: "0.75rem", color: "#525252" }}>{p.category} · {p.year}</p>
                   </div>
                   <div style={{ display: "flex", gap: "0.5rem", flexShrink: 0 }}>
@@ -353,12 +403,10 @@ export default function AdminPage() {
         </>
       )}
 
-      {/* FORMULÁŘ OVERLAY */}
+      {/* FORMULÁŘ */}
       {showForm && (
-        <div
-          onClick={(e) => { if (e.target === e.currentTarget) setShowForm(false); }}
-          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)", zIndex: 200, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "2rem 1rem", overflowY: "auto" }}
-        >
+        <div onClick={(e) => { if (e.target === e.currentTarget) setShowForm(false); }}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)", zIndex: 200, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "2rem 1rem", overflowY: "auto" }}>
           <div style={{ background: "#0f0f0f", border: "1px solid #1f1f1f", borderRadius: "8px", padding: "2rem", width: "100%", maxWidth: "600px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.75rem" }}>
               <p style={{ fontFamily: "var(--font-playfair)", fontSize: "1.25rem", fontWeight: 700, color: "#f5f5f5" }}>
@@ -378,7 +426,6 @@ export default function AdminPage() {
                   <input style={inputSt} value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value.toLowerCase().replace(/\s+/g, "-") })} placeholder="nazev-projektu" />
                 </div>
               </div>
-
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
                 <div>
                   <label style={labelSt}>Kategorie *</label>
@@ -389,29 +436,24 @@ export default function AdminPage() {
                   <input style={inputSt} value={form.year} onChange={(e) => setForm({ ...form, year: e.target.value })} placeholder="2024" />
                 </div>
               </div>
-
               <div>
                 <label style={labelSt}>Popis *</label>
                 <textarea style={{ ...inputSt, resize: "vertical" }} rows={3} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Popis projektu..." />
               </div>
-
               <div>
                 <label style={labelSt}>Výzva projektu</label>
                 <textarea style={{ ...inputSt, resize: "vertical" }} rows={2} value={form.challenge} onChange={(e) => setForm({ ...form, challenge: e.target.value })} placeholder="Hlavní výzva a řešení..." />
               </div>
-
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
                 <div>
-                  <label style={labelSt}>Funkce (oddělené čárkou)</label>
+                  <label style={labelSt}>Funkce (čárkou)</label>
                   <input style={inputSt} value={form.featuresRaw} onChange={(e) => setForm({ ...form, featuresRaw: e.target.value })} placeholder="Admin panel, Galerie, ..." />
                 </div>
                 <div>
-                  <label style={labelSt}>Tech stack (oddělené čárkou)</label>
+                  <label style={labelSt}>Tech stack (čárkou)</label>
                   <input style={inputSt} value={form.techRaw} onChange={(e) => setForm({ ...form, techRaw: e.target.value })} placeholder="Next.js 14, Supabase, ..." />
                 </div>
               </div>
-
-              {/* Obrázek — upload nebo URL */}
               <div>
                 <label style={labelSt}>Obrázek projektu</label>
                 {imagePreview && (
@@ -422,19 +464,12 @@ export default function AdminPage() {
                 )}
                 <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "0.5rem" }}>
                   <input style={inputSt} value={imageFile ? "" : form.image_url} onChange={(e) => { setForm({ ...form, image_url: e.target.value }); setImagePreview(e.target.value); setImageFile(null); }} placeholder="https://images.unsplash.com/..." />
-                  <button
-                    onClick={() => fileRef.current?.click()}
-                    style={{ fontFamily: "var(--font-inter)", fontSize: "0.78rem", fontWeight: 500, color: "#a3a3a3", background: "#0a0a0a", border: "1px solid #2a2a2a", borderRadius: "4px", padding: "0 1rem", cursor: "pointer", whiteSpace: "nowrap" }}
-                  >
+                  <button onClick={() => fileRef.current?.click()} style={{ fontFamily: "var(--font-inter)", fontSize: "0.78rem", fontWeight: 500, color: "#a3a3a3", background: "#0a0a0a", border: "1px solid #2a2a2a", borderRadius: "4px", padding: "0 1rem", cursor: "pointer", whiteSpace: "nowrap" }}>
                     {imageFile ? "✓ Soubor" : "Nahrát soubor"}
                   </button>
                 </div>
                 <input ref={fileRef} type="file" accept="image/*" onChange={handleImageChange} style={{ display: "none" }} />
-                <p style={{ fontFamily: "var(--font-inter)", fontSize: "0.7rem", color: "#525252", marginTop: "0.35rem" }}>
-                  Vlož URL nebo nahraj soubor z počítače
-                </p>
               </div>
-
               <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
                 <div>
                   <label style={labelSt}>Akcentní barva</label>
@@ -449,13 +484,12 @@ export default function AdminPage() {
                   {formError}
                 </p>
               )}
-
               <div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end", marginTop: "0.25rem" }}>
                 <button onClick={() => setShowForm(false)} style={{ fontFamily: "var(--font-inter)", fontSize: "0.85rem", color: "#737373", background: "transparent", border: "1px solid #2a2a2a", borderRadius: "4px", padding: "0.65rem 1.25rem", cursor: "pointer" }}>
                   Zrušit
                 </button>
                 <button onClick={handleSave} disabled={formSaving || uploading} style={{ fontFamily: "var(--font-inter)", fontSize: "0.85rem", fontWeight: 600, color: "#0a0a0a", background: "#22c55e", border: "none", borderRadius: "4px", padding: "0.65rem 1.5rem", cursor: formSaving ? "not-allowed" : "pointer", opacity: formSaving ? 0.7 : 1 }}>
-                  {uploading ? "Nahrávám obrázek..." : formSaving ? "Ukládám..." : "Uložit projekt"}
+                  {uploading ? "Nahrávám..." : formSaving ? "Ukládám..." : "Uložit projekt"}
                 </button>
               </div>
             </div>
