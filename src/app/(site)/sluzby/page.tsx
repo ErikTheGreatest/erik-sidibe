@@ -14,7 +14,7 @@ const services = [
     description:
       "Moderní webová prezentace pro firmy, živnostníky nebo freelancery. Rychlý, responzivní a nasazený na Vercelu s vlastní doménou.",
     features: [
-      "До 4 stránek (Domů, O nás, Služby, Kontakt)",
+      "Do 4 stránek (Domů, O nás, Služby, Kontakt)",
       "Responzivní design — mobil i desktop",
       "Kontaktní formulář",
       "Nasazení na Vercel + vlastní doména",
@@ -28,14 +28,13 @@ const services = [
   {
     title: "Web s admin panelem",
     subtitle: "Plnohodnotná aplikace",
-    price: "od 12 000 Kč",
+    price: "od 8 000 Kč",
     description:
       "Kompletní webová aplikace s databází a administračním panelem. Klient může sám spravovat obsah bez technických znalostí.",
     features: [
       "Vše z prezentačního webu",
       "Supabase databáze + autentizace",
       "Admin panel pro správu obsahu",
-      "Upload obrázků",
       "Kontaktní formulář → databáze",
       "Neomezené stránky a sekce",
       "3 měsíce bezplatných oprav",
@@ -132,6 +131,8 @@ export default function SluzbyPage() {
                   background: service.highlight ? "#0d1a0d" : "#0f0f0f",
                   padding: "2.5rem",
                   position: "relative",
+                  display: "flex",
+                  flexDirection: "column",
                 }}
               >
                 {service.highlight && (
@@ -167,7 +168,7 @@ export default function SluzbyPage() {
                   <span style={{ fontFamily: "var(--font-inter)", fontSize: "0.8rem", fontWeight: 600, color: "#d4d4d4" }}>{service.timeline}</span>
                 </div>
 
-                <Link href="/kontakt" style={{ display: "block", textAlign: "center", fontFamily: "var(--font-inter)", fontSize: "0.875rem", fontWeight: 600, color: service.highlight ? "#0a0a0a" : "#f5f5f5", background: service.highlight ? "#22c55e" : "transparent", border: `1px solid ${service.highlight ? "#22c55e" : "#2a2a2a"}`, padding: "0.875rem", borderRadius: "4px", textDecoration: "none" }}>
+                <Link href="/kontakt" style={{ display: "block", textAlign: "center", fontFamily: "var(--font-inter)", fontSize: "0.875rem", fontWeight: 600, color: service.highlight ? "#0a0a0a" : "#f5f5f5", background: service.highlight ? "#22c55e" : "transparent", border: `1px solid ${service.highlight ? "#22c55e" : "#2a2a2a"}`, padding: "0.875rem", borderRadius: "4px", textDecoration: "none", marginTop: "auto" }}>
                   Nezávazná poptávka →
                 </Link>
               </div>
