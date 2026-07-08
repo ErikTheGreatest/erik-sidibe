@@ -16,6 +16,7 @@ type ProjectForm = {
   featuresRaw: string;
   techRaw: string;
   image_url: string;
+  url: string;
   accent: string;
 };
 
@@ -24,7 +25,7 @@ const emptyForm = (): ProjectForm => ({
   year: new Date().getFullYear().toString(),
   description: "", challenge: "",
   featuresRaw: "", techRaw: "",
-  image_url: "", accent: "#22c55e",
+  image_url: "", url: "", accent: "#22c55e",
 });
 
 export default function AdminPage() {
@@ -118,7 +119,7 @@ export default function AdminPage() {
       slug: p.slug, name: p.name, category: p.category, year: p.year,
       description: p.description, challenge: p.challenge,
       featuresRaw: p.features.join(", "), techRaw: p.tech.join(", "),
-      image_url: p.image_url, accent: p.accent,
+      image_url: p.image_url, url: p.url, accent: p.accent,
     });
     setImageFile(null);
     setImagePreview(p.image_url);
@@ -159,7 +160,7 @@ export default function AdminPage() {
       year: form.year.trim(), description: form.description.trim(), challenge: form.challenge.trim(),
       features: form.featuresRaw.split(",").map((s) => s.trim()).filter(Boolean),
       tech: form.techRaw.split(",").map((s) => s.trim()).filter(Boolean),
-      image_url: imageUrl, accent: form.accent,
+      image_url: imageUrl, url: form.url.trim(), accent: form.accent,
     };
     if (editingId) {
       const { error } = await supabase.from("projects").update(payload).eq("id", editingId);
@@ -470,6 +471,11 @@ export default function AdminPage() {
                 </div>
                 <input ref={fileRef} type="file" accept="image/*" onChange={handleImageChange} style={{ display: "none" }} />
               </div>
+              <div>
+                <label style={labelSt}>URL webu (externí odkaz)</label>
+                <input style={inputSt} value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} placeholder="https://pekarna-zlatyklás.cz" />
+              </div>
+
               <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
                 <div>
                   <label style={labelSt}>Akcentní barva</label>

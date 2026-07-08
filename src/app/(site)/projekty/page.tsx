@@ -62,13 +62,16 @@ export default async function ProjektyPage() {
             <article key={project.id} style={{ background: "#0f0f0f", border: "1px solid #1a1a1a", overflow: "hidden" }}>
               {/* Image */}
               <div style={{ position: "relative", height: "380px" }}>
+                {project.url ? (
+                  <a href={project.url} target="_blank" rel="noopener noreferrer" style={{ display: "block", position: "absolute", inset: 0, zIndex: 2, cursor: "pointer" }} aria-label={`Otevřít web ${project.name}`} />
+                ) : null}
                 {project.image_url ? (
                   <Image
                     src={project.image_url}
                     alt={project.name}
                     fill
                     sizes="100vw"
-                    style={{ objectFit: "cover", opacity: 0.65 }}
+                    style={{ objectFit: "cover", opacity: 0.65, transition: "opacity 0.2s" }}
                     priority={index === 0}
                   />
                 ) : (
