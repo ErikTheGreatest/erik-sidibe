@@ -80,10 +80,7 @@ const faqs = [
     q: "Zajišťuješ i hosting a doménu?",
     a: "Nasazení na Vercel je součástí ceny. Doménu si zaregistrujete sami (cca 200–400 Kč/rok) nebo vám s tím pomohu.",
   },
-  {
-    q: "Děláš i úpravy stávajících webů?",
-    a: "Ano, dohodou. Napište mi co potřebujete a připravím nabídku.",
-  },
+
 ];
 
 export default function SluzbyPage() {
