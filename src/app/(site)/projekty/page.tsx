@@ -63,7 +63,42 @@ export default async function ProjektyPage() {
               {/* Image */}
               <div style={{ position: "relative", height: "380px" }}>
                 {project.url ? (
-                  <a href={project.url} target="_blank" rel="noopener noreferrer" style={{ display: "block", position: "absolute", inset: 0, zIndex: 2, cursor: "pointer" }} aria-label={`Otevřít web ${project.name}`} />
+                  <a
+                    href={project.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={`Otevřít web ${project.name}`}
+                    className="group"
+                    style={{ display: "block", position: "absolute", inset: 0, zIndex: 2, cursor: "pointer" }}
+                  >
+                    <span style={{
+                      position: "absolute", inset: 0,
+                      background: "rgba(0,0,0,0)", display: "flex", alignItems: "center", justifyContent: "center",
+                      transition: "background 0.25s",
+                    }}
+                      onMouseEnter={(e) => {
+                        (e.currentTarget as HTMLElement).style.background = "rgba(0,0,0,0.45)";
+                        const label = (e.currentTarget as HTMLElement).querySelector(".img-label") as HTMLElement;
+                        if (label) label.style.opacity = "1";
+                      }}
+                      onMouseLeave={(e) => {
+                        (e.currentTarget as HTMLElement).style.background = "rgba(0,0,0,0)";
+                        const label = (e.currentTarget as HTMLElement).querySelector(".img-label") as HTMLElement;
+                        if (label) label.style.opacity = "0";
+                      }}
+                    >
+                      <span className="img-label" style={{
+                        opacity: 0, transition: "opacity 0.25s",
+                        display: "flex", alignItems: "center", gap: "0.5rem",
+                        background: "#22c55e", color: "#0a0a0a",
+                        fontFamily: "var(--font-inter)", fontSize: "0.85rem", fontWeight: 700,
+                        padding: "0.6rem 1.25rem", borderRadius: "4px",
+                        letterSpacing: "0.02em",
+                      }}>
+                        Otevřít web ↗
+                      </span>
+                    </span>
+                  </a>
                 ) : null}
                 {project.image_url ? (
                   <Image
@@ -78,8 +113,15 @@ export default async function ProjektyPage() {
                   <div style={{ width: "100%", height: "100%", background: "#1a1a1a" }} />
                 )}
                 <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, transparent 20%, #0f0f0f 100%)" }} />
-                <span style={{ position: "absolute", top: "1.5rem", right: "1.5rem", fontFamily: "var(--font-inter)", fontSize: "0.7rem", fontWeight: 600, color: "#525252", letterSpacing: "0.1em" }}>
-                  {project.year}
+                <span style={{ position: "absolute", top: "1.5rem", right: "1.5rem", display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                  {project.url && (
+                    <span style={{ fontFamily: "var(--font-inter)", fontSize: "0.65rem", fontWeight: 600, color: "#22c55e", background: "rgba(0,0,0,0.6)", border: "1px solid rgba(34,197,94,0.4)", padding: "3px 8px", borderRadius: "3px", letterSpacing: "0.06em" }}>
+                      ↗ kliknutím otevřeš web
+                    </span>
+                  )}
+                  <span style={{ fontFamily: "var(--font-inter)", fontSize: "0.7rem", fontWeight: 600, color: "#525252", letterSpacing: "0.1em" }}>
+                    {project.year}
+                  </span>
                 </span>
                 <span style={{ position: "absolute", top: "1.5rem", left: "1.5rem", fontFamily: "var(--font-inter)", fontSize: "0.65rem", fontWeight: 600, color: "#0a0a0a", background: project.accent, padding: "3px 10px", borderRadius: "2px", letterSpacing: "0.08em", textTransform: "uppercase" }}>
                   {project.category}

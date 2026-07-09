@@ -14,7 +14,6 @@ const services = [
     description:
       "Moderní webová prezentace pro firmy, živnostníky nebo freelancery. Rychlý, responzivní a nasazený na Vercelu s vlastní doménou.",
     features: [
-      "Do 4 stránek (Domů, O nás, Služby, Kontakt)",
       "Responzivní design — mobil i desktop",
       "Kontaktní formulář",
       "Nasazení na Vercel + vlastní doména",
