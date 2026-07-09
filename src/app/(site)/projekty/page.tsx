@@ -68,38 +68,22 @@ export default async function ProjektyPage() {
                     target="_blank"
                     rel="noopener noreferrer"
                     aria-label={`Otevřít web ${project.name}`}
-                    className="group"
+                    className="proj-link"
                     style={{ display: "block", position: "absolute", inset: 0, zIndex: 2, cursor: "pointer" }}
                   >
-                    <span style={{
-                      position: "absolute", inset: 0,
-                      background: "rgba(0,0,0,0)", display: "flex", alignItems: "center", justifyContent: "center",
-                      transition: "background 0.25s",
-                    }}
-                      onMouseEnter={(e) => {
-                        (e.currentTarget as HTMLElement).style.background = "rgba(0,0,0,0.45)";
-                        const label = (e.currentTarget as HTMLElement).querySelector(".img-label") as HTMLElement;
-                        if (label) label.style.opacity = "1";
-                      }}
-                      onMouseLeave={(e) => {
-                        (e.currentTarget as HTMLElement).style.background = "rgba(0,0,0,0)";
-                        const label = (e.currentTarget as HTMLElement).querySelector(".img-label") as HTMLElement;
-                        if (label) label.style.opacity = "0";
-                      }}
-                    >
-                      <span className="img-label" style={{
-                        opacity: 0, transition: "opacity 0.25s",
-                        display: "flex", alignItems: "center", gap: "0.5rem",
-                        background: "#22c55e", color: "#0a0a0a",
-                        fontFamily: "var(--font-inter)", fontSize: "0.85rem", fontWeight: 700,
-                        padding: "0.6rem 1.25rem", borderRadius: "4px",
-                        letterSpacing: "0.02em",
-                      }}>
+                    <span className="proj-overlay" style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <span className="proj-label" style={{ display: "flex", alignItems: "center", gap: "0.5rem", background: "#22c55e", color: "#0a0a0a", fontFamily: "var(--font-inter)", fontSize: "0.85rem", fontWeight: 700, padding: "0.6rem 1.25rem", borderRadius: "4px" }}>
                         Otevřít web ↗
                       </span>
                     </span>
                   </a>
                 ) : null}
+                <style>{`
+                  .proj-overlay { background: rgba(0,0,0,0); transition: background 0.25s; }
+                  .proj-label { opacity: 0; transition: opacity 0.25s; }
+                  .proj-link:hover .proj-overlay { background: rgba(0,0,0,0.45); }
+                  .proj-link:hover .proj-label { opacity: 1; }
+                `}</style>
                 {project.image_url ? (
                   <Image
                     src={project.image_url}
